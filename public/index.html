@@ -1,0 +1,147 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Logs Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #0b0d0e; color: #9ca3af; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .badge-method { background: #1b1e24; color: #d1d5db; padding: 2px 7px; border-radius: 4px; font-weight: bold; font-size: 11px; }
+    .badge-multiplier { background: #062b24; color: #10b981; border: 1px solid #064e3b; border-radius: 4px; padding: 1px 5px; font-size: 11px; margin-left: 6px; }
+    .status-success { color: #10b981; font-weight: bold; }
+    .status-error { color: #ef4444; font-weight: bold; }
+    .cache-read { color: #6b7280; margin-left: 6px; }
+    .cache-write { color: #6b7280; margin-left: 6px; }
+  </style>
+</head>
+<body class="p-4 sm:p-8 min-h-screen">
+  <div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+      <div class="flex items-center gap-3 w-full sm:w-auto">
+        <input 
+          id="keyInput" 
+          type="text" 
+          placeholder="Nhập Key ID hoặc Tên Key..." 
+          class="bg-[#14171a] border border-gray-800 text-sm px-4 py-2 rounded-lg w-full sm:w-80 text-gray-200 focus:outline-none focus:border-emerald-500"
+        />
+        <button 
+          onclick="fetchLogs()" 
+          class="bg-[#16a34a] hover:bg-emerald-600 text-white text-sm px-5 py-2 rounded-lg font-medium transition"
+        >
+          Tra cứu
+        </button>
+      </div>
+
+      <button 
+        onclick="fetchLogs()" 
+        class="bg-[#14171a] border border-gray-800 hover:bg-gray-800 text-xs px-4 py-2 rounded-lg text-gray-300 transition"
+      >
+        Làm mới 🔄
+      </button>
+    </div>
+
+    <!-- Status / Error message -->
+    <div id="statusMessage" class="hidden text-center py-4 text-sm"></div>
+
+    <!-- Bảng hiển thị logs -->
+    <div class="overflow-x-auto border border-gray-800/80 rounded-lg bg-[#0f1215]">
+      <table class="w-full text-left text-xs border-collapse">
+        <thead class="uppercase bg-[#14171a] text-gray-500 border-b border-gray-800/80 font-semibold tracking-wider">
+          <tr>
+            <th class="p-3.5">TIME</th>
+            <th class="p-3.5">METHOD</th>
+            <th class="p-3.5">MODEL</th>
+            <th class="p-3.5">TOKENS (IN / OUT / C-R / C-W)</th>
+            <th class="p-3.5">COST</th>
+            <th class="p-3.5">LATENCY</th>
+            <th class="p-3.5">STATUS</th>
+          </tr>
+        </thead>
+        <tbody id="logList" class="divide-y divide-gray-800/60">
+          <tr>
+            <td colspan="7" class="p-8 text-center text-gray-600">Vui lòng nhập Key để xem bảng logs.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const keyFromUrl = params.get('key');
+    if (keyFromUrl) {
+      document.getElementById('keyInput').value = keyFromUrl;
+      fetchLogs();
+    }
+
+    async function fetchLogs() {
+      const key = document.getElementById('keyInput').value.trim();
+      const statusMessage = document.getElementById('statusMessage');
+      const logList = document.getElementById('logList');
+
+      statusMessage.className = "text-center py-4 text-sm text-gray-400 block";
+      statusMessage.innerText = "Đang tải dữ liệu...";
+
+      try {
+        const res = await fetch(`/api/logs?key=${encodeURIComponent(key)}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Không thể tải logs.");
+        }
+
+        statusMessage.className = "hidden";
+        renderLogs(data.logs || []);
+      } catch (err) {
+        statusMessage.className = "text-center py-4 text-sm text-red-400 block";
+        statusMessage.innerText = err.message;
+      }
+    }
+
+    function renderLogs(logs) {
+      const logList = document.getElementById('logList');
+      if (logs.length === 0) {
+        logList.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-500">Không tìm thấy bản log nào.</td></tr>`;
+        return;
+      }
+
+      logList.innerHTML = logs.map(item => {
+        const date = new Date(item.createdAt);
+        const timeStr = date.toLocaleTimeString('en-US', { hour12: true });
+
+        const inTokens = (item.tokensIn || 0).toLocaleString();
+        const outTokens = (item.tokensOut || 0).toLocaleString();
+        const crTokens = item.cacheReadTokens ? `<span class="cache-read">C·R ${item.cacheReadTokens.toLocaleString()}</span>` : '';
+        const cwTokens = item.cacheWriteTokens ? `<span class="cache-write">C·W ${item.cacheWriteTokens.toLocaleString()}</span>` : '';
+
+        const costUsd = (Number(item.costCents || 0) / 100).toFixed(2);
+        const latencySec = item.latency ? `${(item.latency / 1000).toFixed(1)}s` : '0.0s';
+        const multBadge = item.costMultiplier ? `<span class="badge-multiplier">${item.costMultiplier}x</span>` : '';
+
+        const isSuccess = item.status >= 200 && item.status < 300;
+        const statusClass = isSuccess ? 'status-success' : 'status-error';
+
+        return `
+          <tr class="hover:bg-[#121519] transition">
+            <td class="p-3.5 whitespace-nowrap text-gray-300 font-medium">${timeStr}</td>
+            <td class="p-3.5 whitespace-nowrap"><span class="badge-method">${item.method || 'POST'}</span></td>
+            <td class="p-3.5 whitespace-nowrap text-gray-200 font-medium">
+              ${item.model || '-'} ${multBadge}
+            </td>
+            <td class="p-3.5 whitespace-nowrap font-mono text-gray-300">
+              <span class="text-gray-400">IN</span> ${inTokens} 
+              <span class="text-gray-400 ml-2">OUT</span> ${outTokens}
+              ${crTokens} ${cwTokens}
+            </td>
+            <td class="p-3.5 whitespace-nowrap text-gray-200 font-mono">$${costUsd}</td>
+            <td class="p-3.5 whitespace-nowrap text-gray-400">${latencySec}</td>
+            <td class="p-3.5 whitespace-nowrap"><span class="${statusClass}">${item.status || 200}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+  </script>
+</body>
+</html>

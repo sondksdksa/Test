@@ -1,0 +1,9 @@
+﻿{
+  "name": "freemodel-log-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Log viewer for freemodel keys",
+  "scripts": {
+    "start": "serve public"
+  }
+}
