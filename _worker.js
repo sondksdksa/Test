@@ -19,7 +19,8 @@ const HTML = `<!DOCTYPE html>
 </head>
 <body class="p-4 sm:p-8 min-h-screen">
   <div class="max-w-7xl mx-auto">
-    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+    <!-- Header & Filter -->
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-5">
       <div class="flex items-center gap-3 w-full sm:w-auto">
         <input 
           id="keyInput" 
@@ -43,8 +44,36 @@ const HTML = `<!DOCTYPE html>
       </button>
     </div>
 
+    <!-- Thống kê tổng quan (Tổng tiền & Tổng request) -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div class="bg-[#121519] border border-gray-800/80 rounded-lg p-4 flex items-center justify-between">
+        <div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tổng tiền đã dùng</div>
+          <div id="totalCost" class="text-2xl font-bold font-mono text-emerald-400 mt-1">$0.00</div>
+        </div>
+        <div class="text-2xl">💰</div>
+      </div>
+
+      <div class="bg-[#121519] border border-gray-800/80 rounded-lg p-4 flex items-center justify-between">
+        <div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tổng số Requests</div>
+          <div id="totalRequests" class="text-2xl font-bold font-mono text-gray-200 mt-1">0</div>
+        </div>
+        <div class="text-2xl">📊</div>
+      </div>
+
+      <div class="bg-[#121519] border border-gray-800/80 rounded-lg p-4 flex items-center justify-between">
+        <div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tổng Tokens (In / Out)</div>
+          <div id="totalTokens" class="text-sm font-bold font-mono text-gray-300 mt-2">0 / 0</div>
+        </div>
+        <div class="text-2xl">⚡</div>
+      </div>
+    </div>
+
     <div id="statusMessage" class="hidden text-center py-4 text-sm"></div>
 
+    <!-- Bảng logs -->
     <div class="overflow-x-auto border border-gray-800/80 rounded-lg bg-[#0f1215]">
       <table class="w-full text-left text-xs border-collapse">
         <thead class="uppercase bg-[#14171a] text-gray-500 border-b border-gray-800/80 font-semibold tracking-wider">
@@ -103,6 +132,23 @@ const HTML = `<!DOCTYPE html>
 
     function renderLogs(logs) {
       const logList = document.getElementById('logList');
+      
+      // Tính toán thống kê tổng quan
+      let totalCents = 0;
+      let totalIn = 0;
+      let totalOut = 0;
+
+      logs.forEach(item => {
+        totalCents += Number(item.costCents || 0);
+        totalIn += Number(item.tokensIn || 0);
+        totalOut += Number(item.tokensOut || 0);
+      });
+
+      // Cập nhật card thống kê
+      document.getElementById('totalCost').innerText = '$' + (totalCents / 100).toFixed(4);
+      document.getElementById('totalRequests').innerText = logs.length.toLocaleString();
+      document.getElementById('totalTokens').innerText = \`\${totalIn.toLocaleString()} / \${totalOut.toLocaleString()}\`;
+
       if (logs.length === 0) {
         logList.innerHTML = \`<tr><td colspan="8" class="p-8 text-center text-gray-500">Không tìm thấy bản log nào.</td></tr>\`;
         return;
@@ -110,14 +156,10 @@ const HTML = `<!DOCTYPE html>
 
       logList.innerHTML = logs.map(item => {
         const date = new Date(item.createdAt);
-        
-        // Format Ngày: DD/MM/YYYY
         const day = String(date.getDate()).padStart(2, '0');
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const year = date.getFullYear();
         const dateStr = \`\${day}/\${month}/\${year}\`;
-
-        // Format Giờ: HH:mm:ss AM/PM
         const timeStr = date.toLocaleTimeString('en-US', { hour12: true });
 
         const inTokens = (item.tokensIn || 0).toLocaleString();
@@ -125,7 +167,7 @@ const HTML = `<!DOCTYPE html>
         const crTokens = item.cacheReadTokens ? \`<span class="cache-read">C·R \${item.cacheReadTokens.toLocaleString()}</span>\` : '';
         const cwTokens = item.cacheWriteTokens ? \`<span class="cache-write">C·W \${item.cacheWriteTokens.toLocaleString()}</span>\` : '';
 
-        const costUsd = (Number(item.costCents || 0) / 100).toFixed(2);
+        const costUsd = (Number(item.costCents || 0) / 100).toFixed(4);
         const latencySec = item.latency ? \`\${(item.latency / 1000).toFixed(1)}s\` : '0.0s';
         const multBadge = item.costMultiplier ? \`<span class="badge-multiplier">\${item.costMultiplier}x</span>\` : '';
 
