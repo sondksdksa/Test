@@ -24,8 +24,8 @@ const HTML = `<!DOCTYPE html>
         <input 
           id="keyInput" 
           type="text" 
-          placeholder="Nhập Key ID hoặc Tên Key..." 
-          class="bg-[#14171a] border border-gray-800 text-sm px-4 py-2 rounded-lg w-full sm:w-80 text-gray-200 focus:outline-none focus:border-emerald-500"
+          placeholder="Lọc theo Key ID hoặc Tên Key (Để trống để xem tất cả)..." 
+          class="bg-[#14171a] border border-gray-800 text-sm px-4 py-2 rounded-lg w-full sm:w-96 text-gray-200 focus:outline-none focus:border-emerald-500"
         />
         <button 
           onclick="fetchLogs()" 
@@ -52,6 +52,7 @@ const HTML = `<!DOCTYPE html>
             <th class="p-3.5">TIME</th>
             <th class="p-3.5">METHOD</th>
             <th class="p-3.5">MODEL</th>
+            <th class="p-3.5">KEY INFO</th>
             <th class="p-3.5">TOKENS (IN / OUT / C-R / C-W)</th>
             <th class="p-3.5">COST</th>
             <th class="p-3.5">LATENCY</th>
@@ -60,7 +61,7 @@ const HTML = `<!DOCTYPE html>
         </thead>
         <tbody id="logList" class="divide-y divide-gray-800/60">
           <tr>
-            <td colspan="7" class="p-8 text-center text-gray-600">Vui lòng nhập Key để xem bảng logs.</td>
+            <td colspan="8" class="p-8 text-center text-gray-600">Đang tải danh sách logs...</td>
           </tr>
         </tbody>
       </table>
@@ -72,8 +73,10 @@ const HTML = `<!DOCTYPE html>
     const keyFromUrl = params.get('key');
     if (keyFromUrl) {
       document.getElementById('keyInput').value = keyFromUrl;
-      fetchLogs();
     }
+
+    // Tự động tải luôn khi vào trang
+    fetchLogs();
 
     async function fetchLogs() {
       const key = document.getElementById('keyInput').value.trim();
@@ -102,7 +105,7 @@ const HTML = `<!DOCTYPE html>
     function renderLogs(logs) {
       const logList = document.getElementById('logList');
       if (logs.length === 0) {
-        logList.innerHTML = \`<tr><td colspan="7" class="p-8 text-center text-gray-500">Không tìm thấy bản log nào.</td></tr>\`;
+        logList.innerHTML = \`<tr><td colspan="8" class="p-8 text-center text-gray-500">Không tìm thấy bản log nào.</td></tr>\`;
         return;
       }
 
@@ -122,6 +125,8 @@ const HTML = `<!DOCTYPE html>
         const isSuccess = item.status >= 200 && item.status < 300;
         const statusClass = isSuccess ? 'status-success' : 'status-error';
 
+        const keyDisplay = item.keyLabel ? \`\${item.keyLabel} (\${item.key || ''})\` : (item.key || '-');
+
         return \`
           <tr class="hover:bg-[#121519] transition">
             <td class="p-3.5 whitespace-nowrap text-gray-300 font-medium">\${timeStr}</td>
@@ -129,6 +134,7 @@ const HTML = `<!DOCTYPE html>
             <td class="p-3.5 whitespace-nowrap text-gray-200 font-medium">
               \${item.model || '-'} \${multBadge}
             </td>
+            <td class="p-3.5 whitespace-nowrap text-gray-400 font-mono text-[11px]">\${keyDisplay}</td>
             <td class="p-3.5 whitespace-nowrap font-mono text-gray-300">
               <span class="text-gray-400">IN</span> \${inTokens} 
               <span class="text-gray-400 ml-2">OUT</span> \${outTokens}
@@ -149,18 +155,14 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Route 1: Giao diện HTML
     if (url.pathname === '/' || url.pathname === '/index.html') {
       return new Response(HTML, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' }
       });
     }
 
-    // Route 2: API logs
     if (url.pathname === '/api/logs') {
-      // Ưu tiên biến môi trường, nếu không có thì dùng chuỗi cố định
       const bmSession = env?.BM_SESSION || HARDCODED_SESSION;
-
       const filterKey = (url.searchParams.get('key') || '').trim().toLowerCase();
 
       try {
@@ -182,7 +184,7 @@ export default {
 
         if (!response.ok) {
           return new Response(JSON.stringify({ 
-            error: `Lỗi kết nối Freemodel HTTP ${response.status}. Có thể session đã hết hạn.`,
+            error: `Lỗi Freemodel HTTP ${response.status}: Session có thể đã hết hạn hoặc không đúng.`,
             preview: responseText.slice(0, 200)
           }), {
             status: response.status,
@@ -205,11 +207,12 @@ export default {
 
         let logs = data.logs || [];
 
+        // Lọc linh hoạt: nếu người dùng nhập filterKey
         if (filterKey) {
           logs = logs.filter(item => {
-            const keyMatch = item.key && String(item.key).toLowerCase() === filterKey;
-            const labelMatch = item.keyLabel && String(item.keyLabel).toLowerCase() === filterKey;
-            return keyMatch || labelMatch;
+            const keyStr = String(item.key || '').toLowerCase();
+            const labelStr = String(item.keyLabel || '').toLowerCase();
+            return keyStr.includes(filterKey) || labelStr.includes(filterKey);
           });
         }
 
