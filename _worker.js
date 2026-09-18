@@ -15,19 +15,45 @@ const HTML = `<!DOCTYPE html>
     .status-error { color: #ef4444; font-weight: bold; }
     .cache-read { color: #6b7280; margin-left: 6px; }
     .cache-write { color: #6b7280; margin-left: 6px; }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.8);
+      cursor: pointer;
+    }
   </style>
 </head>
 <body class="p-4 sm:p-8 min-h-screen">
   <div class="max-w-7xl mx-auto">
-    <!-- Header & Filter -->
-    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-5">
-      <div class="flex items-center gap-3 w-full sm:w-auto">
+    <!-- Header & Filter Bar -->
+    <div class="flex flex-col lg:flex-row items-center justify-between gap-4 mb-5">
+      <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+        <!-- Key Search Input -->
         <input 
           id="keyInput" 
           type="text" 
-          placeholder="Filter by Key ID or Key Name (Leave empty for all)..." 
-          class="bg-[#14171a] border border-gray-800 text-sm px-4 py-2 rounded-lg w-full sm:w-96 text-gray-200 focus:outline-none focus:border-emerald-500"
+          placeholder="Filter by Key ID or Key Name..." 
+          class="bg-[#14171a] border border-gray-800 text-sm px-4 py-2 rounded-lg w-full sm:w-72 text-gray-200 focus:outline-none focus:border-emerald-500"
         />
+
+        <!-- Date Filter Input -->
+        <div class="flex items-center gap-2 bg-[#14171a] border border-gray-800 px-3 py-1.5 rounded-lg">
+          <span class="text-xs text-gray-500">Date:</span>
+          <input 
+            id="dateInput" 
+            type="date" 
+            onchange="applyClientFilter()"
+            class="bg-transparent text-sm text-gray-200 focus:outline-none cursor-pointer"
+          />
+          <button 
+            id="clearDateBtn"
+            onclick="clearDateFilter()" 
+            class="text-xs text-gray-400 hover:text-white px-1 ml-1 hidden"
+            title="Clear date filter"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Search Button -->
         <button 
           onclick="fetchLogs()" 
           class="bg-[#16a34a] hover:bg-emerald-600 text-white text-sm px-5 py-2 rounded-lg font-medium transition"
@@ -36,9 +62,10 @@ const HTML = `<!DOCTYPE html>
         </button>
       </div>
 
+      <!-- Refresh Button -->
       <button 
         onclick="fetchLogs()" 
-        class="bg-[#14171a] border border-gray-800 hover:bg-gray-800 text-xs px-4 py-2 rounded-lg text-gray-300 transition"
+        class="bg-[#14171a] border border-gray-800 hover:bg-gray-800 text-xs px-4 py-2 rounded-lg text-gray-300 transition self-end lg:self-auto"
       >
         Refresh 🔄
       </button>
@@ -120,7 +147,8 @@ const HTML = `<!DOCTYPE html>
   </div>
 
   <script>
-    let allLogs = [];
+    let rawLogs = [];
+    let filteredLogs = [];
     let currentPage = 1;
     const PAGE_SIZE = 10;
 
@@ -135,7 +163,6 @@ const HTML = `<!DOCTYPE html>
     async function fetchLogs() {
       const key = document.getElementById('keyInput').value.trim();
       const statusMessage = document.getElementById('statusMessage');
-      const logList = document.getElementById('logList');
 
       statusMessage.className = "text-center py-4 text-sm text-gray-400 block";
       statusMessage.innerText = "Loading data...";
@@ -149,45 +176,71 @@ const HTML = `<!DOCTYPE html>
         }
 
         statusMessage.className = "hidden";
-        allLogs = data.logs || [];
-        currentPage = 1;
-
-        // Calculate summary metrics
-        let totalCents = 0;
-        let totalIn = 0;
-        let totalOut = 0;
-
-        allLogs.forEach(item => {
-          totalCents += Number(item.costCents || 0);
-          totalIn += Number(item.tokensIn || 0);
-          totalOut += Number(item.tokensOut || 0);
-        });
-
-        document.getElementById('totalCost').innerText = '$' + (totalCents / 100).toFixed(4);
-        document.getElementById('totalRequests').innerText = allLogs.length.toLocaleString();
-        document.getElementById('totalTokens').innerText = \`\${totalIn.toLocaleString()} / \${totalOut.toLocaleString()}\`;
-
-        renderCurrentPage();
+        rawLogs = data.logs || [];
+        applyClientFilter();
       } catch (err) {
         statusMessage.className = "text-center py-4 text-sm text-red-400 block";
         statusMessage.innerText = err.message;
       }
     }
 
+    function applyClientFilter() {
+      const selectedDate = document.getElementById('dateInput').value; // format: YYYY-MM-DD
+      const clearBtn = document.getElementById('clearDateBtn');
+
+      if (selectedDate) {
+        clearBtn.classList.remove('hidden');
+        filteredLogs = rawLogs.filter(item => {
+          const itemDate = new Date(item.createdAt);
+          const yyyy = itemDate.getFullYear();
+          const mm = String(itemDate.getMonth() + 1).padStart(2, '0');
+          const dd = String(itemDate.getDate()).padStart(2, '0');
+          const itemDateStr = \`\${yyyy}-\${mm}-\${dd}\`;
+          return itemDateStr === selectedDate;
+        });
+      } else {
+        clearBtn.classList.add('hidden');
+        filteredLogs = rawLogs;
+      }
+
+      currentPage = 1;
+
+      // Update summary cards based on filteredLogs
+      let totalCents = 0;
+      let totalIn = 0;
+      let totalOut = 0;
+
+      filteredLogs.forEach(item => {
+        totalCents += Number(item.costCents || 0);
+        totalIn += Number(item.tokensIn || 0);
+        totalOut += Number(item.tokensOut || 0);
+      });
+
+      document.getElementById('totalCost').innerText = '$' + (totalCents / 100).toFixed(4);
+      document.getElementById('totalRequests').innerText = filteredLogs.length.toLocaleString();
+      document.getElementById('totalTokens').innerText = \`\${totalIn.toLocaleString()} / \${totalOut.toLocaleString()}\`;
+
+      renderCurrentPage();
+    }
+
+    function clearDateFilter() {
+      document.getElementById('dateInput').value = '';
+      applyClientFilter();
+    }
+
     function renderCurrentPage() {
       const logList = document.getElementById('logList');
-      const totalPages = Math.ceil(allLogs.length / PAGE_SIZE) || 1;
+      const totalPages = Math.ceil(filteredLogs.length / PAGE_SIZE) || 1;
 
       if (currentPage > totalPages) currentPage = totalPages;
       if (currentPage < 1) currentPage = 1;
 
       const startIndex = (currentPage - 1) * PAGE_SIZE;
-      const endIndex = Math.min(startIndex + PAGE_SIZE, allLogs.length);
-      const pageData = allLogs.slice(startIndex, endIndex);
+      const endIndex = Math.min(startIndex + PAGE_SIZE, filteredLogs.length);
+      const pageData = filteredLogs.slice(startIndex, endIndex);
 
-      // Update pagination display
-      document.getElementById('paginationInfo').innerText = allLogs.length > 0 
-        ? \`Showing \${startIndex + 1}–\${endIndex} of \${allLogs.length.toLocaleString()} logs\` 
+      document.getElementById('paginationInfo').innerText = filteredLogs.length > 0 
+        ? \`Showing \${startIndex + 1}–\${endIndex} of \${filteredLogs.length.toLocaleString()} logs\` 
         : "Showing 0 of 0 logs";
       document.getElementById('pageIndicator').innerText = \`Page \${currentPage} of \${totalPages}\`;
 
