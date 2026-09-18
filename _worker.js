@@ -1,11 +1,11 @@
 ﻿const HARDCODED_SESSION = "f8267eb38dce71e59c269d06136ccd95c9559b7bb0f6fd4771590438d66aa8ef";
 
 const HTML = `<!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>API Logs Monitor</title>
+  <title>API Request Logs</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background-color: #0b0d0e; color: #9ca3af; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
@@ -25,14 +25,14 @@ const HTML = `<!DOCTYPE html>
         <input 
           id="keyInput" 
           type="text" 
-          placeholder="Lọc theo Key ID hoặc Tên Key (Để trống để xem tất cả)..." 
+          placeholder="Filter by Key ID or Key Name (Leave empty for all)..." 
           class="bg-[#14171a] border border-gray-800 text-sm px-4 py-2 rounded-lg w-full sm:w-96 text-gray-200 focus:outline-none focus:border-emerald-500"
         />
         <button 
           onclick="fetchLogs()" 
           class="bg-[#16a34a] hover:bg-emerald-600 text-white text-sm px-5 py-2 rounded-lg font-medium transition"
         >
-          Tra cứu
+          Search
         </button>
       </div>
 
@@ -40,15 +40,15 @@ const HTML = `<!DOCTYPE html>
         onclick="fetchLogs()" 
         class="bg-[#14171a] border border-gray-800 hover:bg-gray-800 text-xs px-4 py-2 rounded-lg text-gray-300 transition"
       >
-        Làm mới 🔄
+        Refresh 🔄
       </button>
     </div>
 
-    <!-- Thống kê tổng quan (Tổng tiền & Tổng request) -->
+    <!-- Summary Metrics Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
       <div class="bg-[#121519] border border-gray-800/80 rounded-lg p-4 flex items-center justify-between">
         <div>
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tổng tiền đã dùng</div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Cost</div>
           <div id="totalCost" class="text-2xl font-bold font-mono text-emerald-400 mt-1">$0.00</div>
         </div>
         <div class="text-2xl">💰</div>
@@ -56,7 +56,7 @@ const HTML = `<!DOCTYPE html>
 
       <div class="bg-[#121519] border border-gray-800/80 rounded-lg p-4 flex items-center justify-between">
         <div>
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tổng số Requests</div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Requests</div>
           <div id="totalRequests" class="text-2xl font-bold font-mono text-gray-200 mt-1">0</div>
         </div>
         <div class="text-2xl">📊</div>
@@ -64,7 +64,7 @@ const HTML = `<!DOCTYPE html>
 
       <div class="bg-[#121519] border border-gray-800/80 rounded-lg p-4 flex items-center justify-between">
         <div>
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tổng Tokens (In / Out)</div>
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Tokens (In / Out)</div>
           <div id="totalTokens" class="text-sm font-bold font-mono text-gray-300 mt-2">0 / 0</div>
         </div>
         <div class="text-2xl">⚡</div>
@@ -73,8 +73,8 @@ const HTML = `<!DOCTYPE html>
 
     <div id="statusMessage" class="hidden text-center py-4 text-sm"></div>
 
-    <!-- Bảng logs -->
-    <div class="overflow-x-auto border border-gray-800/80 rounded-lg bg-[#0f1215]">
+    <!-- Logs Table -->
+    <div class="overflow-x-auto border border-gray-800/80 rounded-t-lg bg-[#0f1215]">
       <table class="w-full text-left text-xs border-collapse">
         <thead class="uppercase bg-[#14171a] text-gray-500 border-b border-gray-800/80 font-semibold tracking-wider">
           <tr>
@@ -90,14 +90,40 @@ const HTML = `<!DOCTYPE html>
         </thead>
         <tbody id="logList" class="divide-y divide-gray-800/60">
           <tr>
-            <td colspan="8" class="p-8 text-center text-gray-600">Đang tải danh sách logs...</td>
+            <td colspan="8" class="p-8 text-center text-gray-600">Loading logs...</td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    <!-- Pagination Controls (10 logs per page) -->
+    <div id="paginationBar" class="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-[#14171a] border border-t-0 border-gray-800/80 rounded-b-lg text-xs text-gray-400">
+      <div id="paginationInfo">Showing 0 of 0 logs</div>
+      <div class="flex items-center gap-2">
+        <button 
+          id="btnPrev" 
+          onclick="changePage(-1)" 
+          class="px-3 py-1.5 rounded bg-[#1b1e24] text-gray-300 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition"
+        >
+          &larr; Previous
+        </button>
+        <span id="pageIndicator" class="px-2 font-mono text-gray-200">Page 1 of 1</span>
+        <button 
+          id="btnNext" 
+          onclick="changePage(1)" 
+          class="px-3 py-1.5 rounded bg-[#1b1e24] text-gray-300 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition"
+        >
+          Next &rarr;
+        </button>
+      </div>
+    </div>
   </div>
 
   <script>
+    let allLogs = [];
+    let currentPage = 1;
+    const PAGE_SIZE = 10;
+
     const params = new URLSearchParams(window.location.search);
     const keyFromUrl = params.get('key');
     if (keyFromUrl) {
@@ -112,49 +138,68 @@ const HTML = `<!DOCTYPE html>
       const logList = document.getElementById('logList');
 
       statusMessage.className = "text-center py-4 text-sm text-gray-400 block";
-      statusMessage.innerText = "Đang tải dữ liệu...";
+      statusMessage.innerText = "Loading data...";
 
       try {
         const res = await fetch(\`/api/logs?key=\${encodeURIComponent(key)}\`);
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.error || "Không thể tải logs.");
+          throw new Error(data.error || "Failed to load logs.");
         }
 
         statusMessage.className = "hidden";
-        renderLogs(data.logs || []);
+        allLogs = data.logs || [];
+        currentPage = 1;
+
+        // Calculate summary metrics
+        let totalCents = 0;
+        let totalIn = 0;
+        let totalOut = 0;
+
+        allLogs.forEach(item => {
+          totalCents += Number(item.costCents || 0);
+          totalIn += Number(item.tokensIn || 0);
+          totalOut += Number(item.tokensOut || 0);
+        });
+
+        document.getElementById('totalCost').innerText = '$' + (totalCents / 100).toFixed(4);
+        document.getElementById('totalRequests').innerText = allLogs.length.toLocaleString();
+        document.getElementById('totalTokens').innerText = \`\${totalIn.toLocaleString()} / \${totalOut.toLocaleString()}\`;
+
+        renderCurrentPage();
       } catch (err) {
         statusMessage.className = "text-center py-4 text-sm text-red-400 block";
         statusMessage.innerText = err.message;
       }
     }
 
-    function renderLogs(logs) {
+    function renderCurrentPage() {
       const logList = document.getElementById('logList');
-      
-      // Tính toán thống kê tổng quan
-      let totalCents = 0;
-      let totalIn = 0;
-      let totalOut = 0;
+      const totalPages = Math.ceil(allLogs.length / PAGE_SIZE) || 1;
 
-      logs.forEach(item => {
-        totalCents += Number(item.costCents || 0);
-        totalIn += Number(item.tokensIn || 0);
-        totalOut += Number(item.tokensOut || 0);
-      });
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
 
-      // Cập nhật card thống kê
-      document.getElementById('totalCost').innerText = '$' + (totalCents / 100).toFixed(4);
-      document.getElementById('totalRequests').innerText = logs.length.toLocaleString();
-      document.getElementById('totalTokens').innerText = \`\${totalIn.toLocaleString()} / \${totalOut.toLocaleString()}\`;
+      const startIndex = (currentPage - 1) * PAGE_SIZE;
+      const endIndex = Math.min(startIndex + PAGE_SIZE, allLogs.length);
+      const pageData = allLogs.slice(startIndex, endIndex);
 
-      if (logs.length === 0) {
-        logList.innerHTML = \`<tr><td colspan="8" class="p-8 text-center text-gray-500">Không tìm thấy bản log nào.</td></tr>\`;
+      // Update pagination display
+      document.getElementById('paginationInfo').innerText = allLogs.length > 0 
+        ? \`Showing \${startIndex + 1}–\${endIndex} of \${allLogs.length.toLocaleString()} logs\` 
+        : "Showing 0 of 0 logs";
+      document.getElementById('pageIndicator').innerText = \`Page \${currentPage} of \${totalPages}\`;
+
+      document.getElementById('btnPrev').disabled = currentPage <= 1;
+      document.getElementById('btnNext').disabled = currentPage >= totalPages;
+
+      if (pageData.length === 0) {
+        logList.innerHTML = \`<tr><td colspan="8" class="p-8 text-center text-gray-500">No logs found.</td></tr>\`;
         return;
       }
 
-      logList.innerHTML = logs.map(item => {
+      logList.innerHTML = pageData.map(item => {
         const date = new Date(item.createdAt);
         const day = String(date.getDate()).padStart(2, '0');
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -199,6 +244,11 @@ const HTML = `<!DOCTYPE html>
         \`;
       }).join('');
     }
+
+    function changePage(direction) {
+      currentPage += direction;
+      renderCurrentPage();
+    }
   </script>
 </body>
 </html>`;
@@ -224,7 +274,7 @@ export default {
             'Cookie': `bm_session=${bmSession.trim()}`,
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
             'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'vi,en-US;q=0.9,en;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
             'Referer': 'https://freemodel.dev/',
             'Sec-Ch-Ua': '"Chromium";v="128", "Not;A=Brand";v="24"',
             'Sec-Ch-Ua-Mobile': '?0',
@@ -236,7 +286,7 @@ export default {
 
         if (!response.ok) {
           return new Response(JSON.stringify({ 
-            error: `Lỗi Freemodel HTTP ${response.status}: Session có thể đã hết hạn hoặc không đúng.`,
+            error: `Freemodel error HTTP ${response.status}. Session might be expired.`,
             preview: responseText.slice(0, 200)
           }), {
             status: response.status,
@@ -249,7 +299,7 @@ export default {
           data = JSON.parse(responseText);
         } catch (e) {
           return new Response(JSON.stringify({ 
-            error: 'Dữ liệu trả về không phải JSON.',
+            error: 'Invalid JSON response from upstream.',
             preview: responseText.slice(0, 200)
           }), {
             status: 502,
@@ -278,7 +328,7 @@ export default {
         });
 
       } catch (err) {
-        return new Response(JSON.stringify({ error: 'Lỗi Worker: ' + err.message }), {
+        return new Response(JSON.stringify({ error: 'Worker error: ' + err.message }), {
           status: 500,
           headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
         });
