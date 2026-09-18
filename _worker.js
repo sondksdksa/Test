@@ -1,4 +1,6 @@
-﻿const HTML = `<!DOCTYPE html>
+﻿const HARDCODED_SESSION = "f8267eb38dce71e59c269d06136ccd95c9559b7bb0f6fd4771590438d66aa8ef";
+
+const HTML = `<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
@@ -147,24 +149,17 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Route 1: Trả về trang giao diện HTML khi truy cập trang chủ /
+    // Route 1: Giao diện HTML
     if (url.pathname === '/' || url.pathname === '/index.html') {
       return new Response(HTML, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' }
       });
     }
 
-    // Route 2: API lấy log /api/logs
+    // Route 2: API logs
     if (url.pathname === '/api/logs') {
-      const bmSession = env.BM_SESSION;
-      if (!bmSession) {
-        return new Response(JSON.stringify({ 
-          error: 'Chưa cấu hình biến BM_SESSION trong Settings -> Variables and Secrets của Worker này.' 
-        }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
-        });
-      }
+      // Ưu tiên biến môi trường, nếu không có thì dùng chuỗi cố định
+      const bmSession = env?.BM_SESSION || HARDCODED_SESSION;
 
       const filterKey = (url.searchParams.get('key') || '').trim().toLowerCase();
 
