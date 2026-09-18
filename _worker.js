@@ -49,7 +49,7 @@ const HTML = `<!DOCTYPE html>
       <table class="w-full text-left text-xs border-collapse">
         <thead class="uppercase bg-[#14171a] text-gray-500 border-b border-gray-800/80 font-semibold tracking-wider">
           <tr>
-            <th class="p-3.5">TIME</th>
+            <th class="p-3.5">TIME / DATE</th>
             <th class="p-3.5">METHOD</th>
             <th class="p-3.5">MODEL</th>
             <th class="p-3.5">KEY INFO</th>
@@ -75,7 +75,6 @@ const HTML = `<!DOCTYPE html>
       document.getElementById('keyInput').value = keyFromUrl;
     }
 
-    // Tự động tải luôn khi vào trang
     fetchLogs();
 
     async function fetchLogs() {
@@ -111,6 +110,14 @@ const HTML = `<!DOCTYPE html>
 
       logList.innerHTML = logs.map(item => {
         const date = new Date(item.createdAt);
+        
+        // Format Ngày: DD/MM/YYYY
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const dateStr = \`\${day}/\${month}/\${year}\`;
+
+        // Format Giờ: HH:mm:ss AM/PM
         const timeStr = date.toLocaleTimeString('en-US', { hour12: true });
 
         const inTokens = (item.tokensIn || 0).toLocaleString();
@@ -129,7 +136,10 @@ const HTML = `<!DOCTYPE html>
 
         return \`
           <tr class="hover:bg-[#121519] transition">
-            <td class="p-3.5 whitespace-nowrap text-gray-300 font-medium">\${timeStr}</td>
+            <td class="p-3.5 whitespace-nowrap">
+              <div class="text-gray-200 font-medium">\${timeStr}</div>
+              <div class="text-[11px] text-gray-500">\${dateStr}</div>
+            </td>
             <td class="p-3.5 whitespace-nowrap"><span class="badge-method">\${item.method || 'POST'}</span></td>
             <td class="p-3.5 whitespace-nowrap text-gray-200 font-medium">
               \${item.model || '-'} \${multBadge}
@@ -207,7 +217,6 @@ export default {
 
         let logs = data.logs || [];
 
-        // Lọc linh hoạt: nếu người dùng nhập filterKey
         if (filterKey) {
           logs = logs.filter(item => {
             const keyStr = String(item.key || '').toLowerCase();
